@@ -345,8 +345,27 @@ function Deploy-CustomDetection {
             }
             #endregion
         } catch {
-            Write-Error "Error deploying detection rule from '$InputFile': $($_.Exception.Message)"
-            Write-Verbose "$($_.ErrorDetails.Message)"
+            $apiErrorMessage = $null
+            if ($_.ErrorDetails.Message) {
+                try {
+                    $errorBody = $_.ErrorDetails.Message | ConvertFrom-Json
+                    if ($errorBody.error.message) {
+                        $apiErrorMessage = $errorBody.error.message
+                    }
+                } catch {
+                    # ErrorDetails is not JSON; use it as-is
+                    $apiErrorMessage = $_.ErrorDetails.Message
+                }
+            }
+
+            $exMsg = $_.Exception.Message
+            if ($apiErrorMessage) {
+                # Replace the duplicated status text in parentheses with the actual API error
+                # e.g. "...Conflict (Conflict)." becomes "...Conflict (Schedule.Period 'derp' is not...)"
+                $exMsg = $exMsg -replace '\(([^)]+)\)\.?\s*$', "($apiErrorMessage)"
+            }
+
+            Write-Error "Error deploying detection rule from '$InputFile': $exMsg"
             Write-Debug "$(($jsonObj | ConvertTo-Json -Depth 10))"
             throw
         }
